@@ -1,11 +1,17 @@
 'use strict';
 
 const Homey = require('homey');
-
+//const { HomeyAPI } = require('homey-api');
 class homeyknmi extends Homey.App {
     
     async onInit() {
         this.log('KNMI Weerwaarschuwing is being initialized');
+		//try {
+		//	this.homeyApi = await HomeyAPI.createAppAPI({ homey: this.homey });
+		//	this.deviceManager = this.homeyApi.devices;
+		  } catch (error) {
+			this.log('Error creating Homey API:', error);
+			
         process.on('uncaughtException', (err) => {
 			this.error(`UnCaught exception: ${err}\n`);
 		});
@@ -24,9 +30,11 @@ class homeyknmi extends Homey.App {
 		.on('cpuwarn', () => {
 			this.log('cpu warning');
 		});
+
+		  }
     }
 
-}
+//}
 
 // module.exports.init = homeyknmi;
 module.exports = homeyknmi;

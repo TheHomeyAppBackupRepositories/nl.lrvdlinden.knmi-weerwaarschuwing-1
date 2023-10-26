@@ -1,24 +1,23 @@
-'use strict';
 const Homey = require('homey');
+//const { HomeyAPI } = require('homey-api');
 const Parser = require('rss-parser');
 const fetch = require('node-fetch');
 
 class knmiDevice extends Homey.Device {
-    log() {
-        console.log.bind(this, '[log]').apply(this, arguments);
-    }
-
-    error() {
-        console.error.bind(this, '[error]').apply(this, arguments);
-    }
-
-    onInit() {
+    async onInit() {
         this.log(`[onInit] ${this.homey.manifest.id} - ${this.homey.manifest.version} started...`);
-
+      //  this.homeyApi = await HomeyAPI.createAppAPI({
+      //      homey: this.homey,
+      //    });
+        
+          // Controleer of this.homeyApi gedefinieerd is
+     //     if(this.homeyApi){
+     //       this.deviceManager = this.homeyApi.devices;
+     //     } else {
+      //      this.log('homeyApi is undefined!');
+      //    }
         this.triggerNewArticle = this.homey.flow.getDeviceTriggerCard('new_article');
-
         this.receivedArticleLink = null;
-
         this.checkInterval = 5 * 60 * 1000; // 5 minutes
         this.parser = new Parser();
         this.feedUrl = 'https://www.knmi.nl/rssfeeds/rss_KNMIwaarschuwingen';
@@ -53,6 +52,20 @@ class knmiDevice extends Homey.Device {
         }
     }
 
+    async triggerNewArticleTrigger(data) {
+        try {
+            const notificationText = `${data.title}`;
+
+            await this.homey.notifications.createNotification({
+                excerpt: notificationText
+            });
+
+            this.log(`[triggerNewArticleTrigger] - Notification sent: ${notificationText}`);
+        } catch (error) {
+            this.error('[triggerNewArticleTrigger] - Error sending notification', error);
+        }
+    }
+
     async checkRssFeed() {
         try {
             const feed = await this.parser.parseURL(this.feedUrl);
@@ -84,16 +97,15 @@ class knmiDevice extends Homey.Device {
 
                 this.log(`[checkRssFeed] - New article data:`, data);
 
-                // Check if the new article has a different pubDate from the last triggered article
                 if (pubDate !== this.lastTriggeredPubDate) {
                     this.log(`[checkRssFeed] - New article detected. Triggering new_article flow...`);
-                   await this.triggerNewArticle.trigger(this,data)
+                    await this.triggerNewArticle.trigger(this, data)
                         .then(() => {
                             this.log(`[checkRssFeed] - new_article flow triggered successfully.`);
+                            this.triggerNewArticleTrigger(data);  // Trigger the notification
                         })
                         .catch((err) => this.error('[checkRssFeed] - Error in triggerNewArticle', err));
 
-                    // Update the lastTriggeredPubDate with the current pubDate
                     this.lastTriggeredPubDate = pubDate;
                 } else {
                     this.log(`[checkRssFeed] - Article already triggered, skipping...`);
@@ -106,68 +118,4 @@ class knmiDevice extends Homey.Device {
     }
 }
 
-class knmiApp extends Homey.App {
-    onInit() {
-        this.log('[knmiApp] initialized...');
-
-        // Register triggers
-        const newArticleTrigger = new Homey.FlowCardTriggerDevice('new_article');
-        newArticleTrigger
-            .register()
-            .registerRunListener(async (args, state) => {
-                // No need to use the settings here, the trigger will directly pass the values to the condition cards
-                return true;
-            });
-
-        // Register conditions code
-
-            const code = this.homey.flow.getConditionCard('code');
-            code.registerRunListener(async (args, state) => {
-                this.homey.app.log('[code]', state, { ...args, device: 'LOG' });
-                return true;
-            });
-
-        // Register conditions code
-
-        const codeCondition = this.homey.flow.getConditionCard('code');
-        codeCondition.registerRunListener(async (args, state) => {
-          this.homey.app.log('[code_dropdown]', state, { ...args, device: 'LOG' });
-          return this.lastArticle && this.lastArticle.title && this.lastArticle.title.includes(args.dropdown_code)
-        });
-
-        // Register conditions provincie
-
-        const ProvincesCondition = this.homey.flow.getConditionCard('Provinces');
-        ProvincesCondition.registerRunListener(async (args, state) => {
-          this.homey.app.log('[dropdown_province]', state, { ...args, device: 'LOG' });
-          return this.lastArticle && this.lastArticle.title && this.lastArticle.title.includes(args.dropdown_province)
-        });
-
-        // Register conditions multi code
-        const multiple_codeCondition = this.homey.flow.getConditionCard('multiple_code');
-        multiple_codeCondition.registerRunListener(async (args, state) => {
-          this.homey.app.log('[dropdown_code_1]', state, { ...args, device: 'LOG' });
-          this.homey.app.log('[dropdown_code_2]', this.lastArticle);
-
-          const code1 = this.lastArticle && this.lastArticle.title && this.lastArticle.title.includes(args.dropdown_code_1)
-          const code2 = this.lastArticle && this.lastArticle.title && this.lastArticle.title.includes(args.dropdown_code_2)
-          return code1 || code2;
-        });
-
-        // Register conditions multi provincie
-        const multiple_provinceCondition = this.homey.flow.getConditionCard('multiple_provinces');
-        multiple_provinceCondition.registerRunListener(async (args, state) => {
-          this.homey.app.log('[dropdown_province_1]', state, { ...args, device: 'LOG' });
-          this.homey.app.log('[dropdown_province_2]', this.lastArticle);
-
-          const province1 = this.lastArticle && this.lastArticle.title && this.lastArticle.title.includes(args.dropdown_province_1)
-          const province2 = this.lastArticle && this.lastArticle.title && this.lastArticle.title.includes(args.dropdown_province_2)
-          return province1 || province2;
-        });
-
-
-    }
-}
-
 module.exports = knmiDevice;
-
